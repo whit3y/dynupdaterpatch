@@ -1,0 +1,13 @@
+Browse to the appropriate commit, e.g.
+
+https://github.com/whit3y/pfsense2.8.1/commit/9366be6632c1353c556b508c2d553166de54e43f
+
+Add '.patch' to the url, e.g.
+
+https://github.com/whit3y/pfsense2.8.1/commit/9366be6632c1353c556b508c2d553166de54e43f.patch
+
+Paste content into a new file, with suffix .patch, e.g.
+
+/pfsense/2.8.1.patch
+
+Remove email address
