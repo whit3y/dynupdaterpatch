@@ -1,0 +1,121 @@
+From 9366be6632c1353c556b508c2d553166de54e43f Mon Sep 17 00:00:00 2001
+From: whit3y
+Date: Mon, 20 Oct 2025 15:32:55 -0400
+Subject: [PATCH] DynUpdater added to 2.8.1
+
+---
+ src/etc/inc/dyndns.class                   | 44 ++++++++++++++++++++++
+ src/etc/inc/services.inc                   |  4 +-
+ src/usr/local/www/services_dyndns_edit.php |  1 +
+ 3 files changed, 47 insertions(+), 2 deletions(-)
+
+diff --git a/src/etc/inc/dyndns.class b/src/etc/inc/dyndns.class
+index 050b3c2..ebec4a2 100644
+--- a/src/etc/inc/dyndns.class
++++ b/src/etc/inc/dyndns.class
+@@ -46,6 +46,7 @@
+ 	 *    - DuiaDNS IPv6 (www.duiadns.net)
+ 	 *    - DY.fi (dy.fi)
+ 	 *    - DynDns (dyndns.org) [dynamic, static, custom]
++	 *    - DynUpdater (domains.dynupdater.com)
+ 	 *    - DynS (dyns.org)
+ 	 *    - Dynv6 (www.dynv6.com)
+ 	 *    - EasyDNS (easydns.com)
+@@ -116,6 +117,7 @@
+ 	 *  DynDNS Custom   - Last Tested: NEVER
+ 	 *  DynDNS Dynamic  - Last Tested: 12 July 2005
+ 	 *  DynDNS Static   - Last Tested: NEVER
++	 *  DynUpdater      - Last Tested: 20 November 2025
+ 	 *  Dyns            - Last Tested: NEVER
+ 	 *  EasyDNS         - Last Tested: 20 July 2008
+ 	 *  Eurodns         - Last Tested: 27 June 2013
+@@ -472,6 +474,7 @@
+ 					case 'dyndns':
+ 					case 'dyndns-custom':
+ 					case 'dyndns-static':
++					case 'dynupdater':
+ 					case 'dyns':
+ 					case 'dynv6':
+ 					case 'dynv6-v6':
+@@ -1327,6 +1330,20 @@
+ 					curl_setopt($ch, CURLOPT_USERAGENT, $this->_UserAgent);
+ 					curl_setopt($ch, CURLOPT_POST, 1);
+ 					break;
++				case 'dynupdater':
++					$needsIP = FALSE;
++					$post_data['username:password'] = $this->_dnsUser . ':' . $this->_dnsPass;
++					$post_data['hostname'] = $this->_dnsHost;
++					$post_data['myip'] = $this->_dnsIP;
++					$post_data['offline'] = 'no';
++					$server = "https://domains.dynupdater.com/nic/update";
++					$port = "";
++					curl_setopt($ch, CURLOPT_URL, 'https://domains.dynupdater.com/nic/update');
++					curl_setopt($ch, CURLOPT_USERPWD, $this->_dnsUser . ':' . $this->_dnsPass);
++					curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post_data));
++					curl_setopt($ch, CURLOPT_USERAGENT, $this->_UserAgent);
++					curl_setopt($ch, CURLOPT_POST, 1);
++					break;
+ 				case 'dnsmadeeasy':
+ 					$needsIP = TRUE;
+ 					$server = "https://cp.dnsmadeeasy.com/servlet/updateip";
+@@ -2919,6 +2936,33 @@
+ 						$this->_debug($data);
+ 					}
+ 					break;
++				case 'dynupdater':
++					if (preg_match('/nochg/i', $data)) {
++						$status = $status_intro . $success_str . gettext("No Change In IP Address");
++						$successful_update = true;
++					} else if (preg_match('/good/i', $data)) {
++						$status = $status_intro . $success_str . gettext("IP Address Changed Successfully!") . " (" . $this->_dnsIP . ")";
++						$successful_update = true;
++					} else if (preg_match('/notfqdn/i', $data)) {
++						$status = $status_intro . $error_str . gettext("Not A FQDN");
++					} else if (preg_match('/badauth/i', $data)) {
++						$status = $status_intro . $error_str . gettext("User Authorization Failed");
++					} else if (preg_match('/nohost/i', $data)) {
++						$status = $status_intro . $error_str . gettext("Hostname does not exist or DynDNS not enabled");
++					} else if (preg_match('/badagent/i', $data)) {
++						$status = $status_intro . $error_str . gettext("Bad request");
++					} else if (preg_match('/abuse/i', $data)) {
++						$status = $status_intro . $error_str . gettext("Dynamic DNS access has been blocked!");
++					} else if (preg_match('/911/i', $data)) {
++						$status = $status_intro . $error_str . gettext("Error on Google's end, retry in 5 minutes");
++					} else if (strpos($data, 'error code: 520') !== false) {
++						$status = $status_intro . $error_str . gettext("Error while updating on DynUpdater");
++					} else {
++						$status = $status_intro . "(" . gettext("Unknown Response") . ")";
++						log_error($status_intro . gettext("PAYLOAD:") . " " . $data);
++						$this->_debug($data);
++					}
++					break;
+ 				case 'dnsmadeeasy':
+ 					switch ($data) {
+ 						case 'success':
+diff --git a/src/etc/inc/services.inc b/src/etc/inc/services.inc
+index cc84d5e..69d9aef 100644
+--- a/src/etc/inc/services.inc
++++ b/src/etc/inc/services.inc
+@@ -27,8 +27,8 @@
+ 
+ require_once('services_dhcp.inc');
+ 
+-define('DYNDNS_PROVIDER_VALUES', 'all-inkl azure azurev6 citynetwork cloudflare cloudflare-v6 cloudns custom custom-v6 desec desec-v6 digitalocean digitalocean-v6 dnsexit dnsimple dnsimple-v6 dnsmadeeasy dnsomatic domeneshop domeneshop-v6 dreamhost dreamhost-v6 duiadns duiadns-v6 dyfi dyndns dyndns-custom dyndns-static dyns dynv6 dynv6-v6 easydns easydns-v6 eurodns freedns freedns-v6 freedns2 freedns2-v6 glesys gandi-livedns gandi-livedns-v6 godaddy godaddy-v6 googledomains gratisdns he-net he-net-v6 he-net-tunnelbroker hover linode linode-v6 loopia luadns luadns-v6 mythicbeasts mythicbeasts-v6 name.com name.com-v6 namecheap nicru nicru-v6 noip noip-v6 noip-free noip-free-v6 onecom onecom-v6 ods opendns ovh-dynhost route53 route53-v6 selfhost spdyn spdyn-v6 strato yandex yandex-v6 zoneedit porkbun porkbun-v6');
+-define('DYNDNS_PROVIDER_DESCRIPTIONS', 'All-Inkl.com,Azure DNS,Azure DNS (v6),City Network,Cloudflare,Cloudflare (v6),ClouDNS,Custom,Custom (v6),deSEC,deSEC (v6),DigitalOcean,DigitalOcean (v6),DNSexit,DNSimple,DNSimple (v6),DNS Made Easy,DNS-O-Matic,Domeneshop,Domeneshop (v6),DreamHost,Dreamhost (v6),DuiaDns.net,DuiaDns.net (v6),DY.fi,DynDNS (dynamic),DynDNS (custom),DynDNS (static),DyNS,Dynv6,Dynv6 (v6),easyDNS,easyDNS (v6),Euro Dns,freeDNS,freeDNS (v6),freeDNS API Version 2, freeDNS API Version 2 (v6),GleSYS,Gandi LiveDNS,Gandi LiveDNS (v6),GoDaddy,GoDaddy (v6),Google Domains,GratisDNS,HE.net,HE.net (v6),HE.net Tunnelbroker,Hover,Linode,Linode (v6),Loopia,LuaDNS,LuaDNS (v6),Mythic Beasts,Mythic Beasts (v6),Name.com,Name.com (v6),Namecheap,NIC.RU,NIC.RU (v6),No-IP,No-IP (v6),No-IP (free),No-IP (free-v6),One.com,One.com (v6),ODS.org,OpenDNS,OVH DynHOST,Route 53,Route 53 (v6),SelfHost,SPDYN,SPDYN (v6),Strato,Yandex,Yandex (v6),ZoneEdit,Porkbun,Porkbun (v6)');
++define('DYNDNS_PROVIDER_VALUES', 'all-inkl azure azurev6 citynetwork cloudflare cloudflare-v6 cloudns custom custom-v6 desec desec-v6 digitalocean digitalocean-v6 dnsexit dnsimple dnsimple-v6 dnsmadeeasy dnsomatic domeneshop domeneshop-v6 dreamhost dreamhost-v6 duiadns duiadns-v6 dyfi dyndns dyndns-custom dyndns-static dyns dynupdater dynv6 dynv6-v6 easydns easydns-v6 eurodns freedns freedns-v6 freedns2 freedns2-v6 glesys gandi-livedns gandi-livedns-v6 godaddy godaddy-v6 googledomains gratisdns he-net he-net-v6 he-net-tunnelbroker hover linode linode-v6 loopia luadns luadns-v6 mythicbeasts mythicbeasts-v6 name.com name.com-v6 namecheap nicru nicru-v6 noip noip-v6 noip-free noip-free-v6 onecom onecom-v6 ods opendns ovh-dynhost route53 route53-v6 selfhost spdyn spdyn-v6 strato yandex yandex-v6 zoneedit porkbun porkbun-v6');
++define('DYNDNS_PROVIDER_DESCRIPTIONS', 'All-Inkl.com,Azure DNS,Azure DNS (v6),City Network,Cloudflare,Cloudflare (v6),ClouDNS,Custom,Custom (v6),deSEC,deSEC (v6),DigitalOcean,DigitalOcean (v6),DNSexit,DNSimple,DNSimple (v6),DNS Made Easy,DNS-O-Matic,Domeneshop,Domeneshop (v6),DreamHost,Dreamhost (v6),DuiaDns.net,DuiaDns.net (v6),DY.fi,DynDNS (dynamic),DynDNS (custom),DynDNS (static),DyNS,DynUpdater,Dynv6,Dynv6 (v6),easyDNS,easyDNS (v6),Euro Dns,freeDNS,freeDNS (v6),freeDNS API Version 2, freeDNS API Version 2 (v6),GleSYS,Gandi LiveDNS,Gandi LiveDNS (v6),GoDaddy,GoDaddy (v6),Google Domains,GratisDNS,HE.net,HE.net (v6),HE.net Tunnelbroker,Hover,Linode,Linode (v6),Loopia,LuaDNS,LuaDNS (v6),Mythic Beasts,Mythic Beasts (v6),Name.com,Name.com (v6),Namecheap,NIC.RU,NIC.RU (v6),No-IP,No-IP (v6),No-IP (free),No-IP (free-v6),One.com,One.com (v6),ODS.org,OpenDNS,OVH DynHOST,Route 53,Route 53 (v6),SelfHost,SPDYN,SPDYN (v6),Strato,Yandex,Yandex (v6),ZoneEdit,Porkbun,Porkbun (v6)');
+ 
+ /* implement ipv6 route advertising daemon */
+ function services_radvd_configure($blacklist = array()) {
+diff --git a/src/usr/local/www/services_dyndns_edit.php b/src/usr/local/www/services_dyndns_edit.php
+index 93638c0..8f17bb0 100644
+--- a/src/usr/local/www/services_dyndns_edit.php
++++ b/src/usr/local/www/services_dyndns_edit.php
+@@ -92,6 +92,7 @@ function is_dyndns_username($uname) {
+ 		"digitalocean" => array("apex" => true, "wildcard" => true, "username_none" => true),
+ 		"digitalocean-v6" => array("apex" => true, "wildcard" => true, "username_none" => true),
+ 		"dnsmadeeasy" => array("apex" => false, "wildcard" => false, "username_none" => true),
++		"dynupdater" => array("apex" => false, "wildcard" => true, "username_none" => false),
+ 		"freedns" => array("apex" => false, "wildcard" => false, "username_none" => true),
+ 		"freedns-v6" => array("apex" => false, "wildcard" => false, "username_none" => true),
+ 		"freedns2" => array("apex" => false, "wildcard" => false, "username_none" => true),
